@@ -11,22 +11,33 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Asset, MaintenanceRecord } from "@/types/asset";
 import { useAssets } from "@/hooks/use-assets";
 import { useMaintenanceRecords, useAddMaintenanceRecord, useUpdateMaintenanceRecord } from "@/hooks/use-maintenance";
+import { useMaintenanceContext } from "@/contexts/maintenance-context";
+import { getAeroButtonClass } from "@/lib/glassmorphism-config";
 
 interface CreateMaintenanceModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     initialData?: MaintenanceRecord | null;
     defaultAssetId?: string | null;
-    enableAutoCost?: boolean;
+
     enableGlassmorphism?: boolean;
 }
 
-export function CreateMaintenanceModal({ open, onOpenChange, initialData, defaultAssetId, enableAutoCost = true, enableGlassmorphism = false }: CreateMaintenanceModalProps) {
+export function CreateMaintenanceModal({ open, onOpenChange, initialData, defaultAssetId, enableGlassmorphism = false }: CreateMaintenanceModalProps) {
     const { data: assets = [] } = useAssets();
     const { data: records = [] } = useMaintenanceRecords();
+    const { glassType } = useMaintenanceContext();
     const addRecordMutation = useAddMaintenanceRecord();
     const updateRecordMutation = useUpdateMaintenanceRecord();
     const [validationError, setValidationError] = useState<string | null>(null);
+
+    // Helper to apply Aero button styling
+    const getButtonClassName = (baseClass: string = "") => {
+        if (glassType === 'aero') {
+            return `${baseClass} ${getAeroButtonClass()}`.trim();
+        }
+        return baseClass;
+    };
 
     const [formData, setFormData] = useState<Partial<MaintenanceRecord>>({
         assetId: "",
@@ -103,12 +114,12 @@ export function CreateMaintenanceModal({ open, onOpenChange, initialData, defaul
 
     // Auto-estimate cost based on asset category
     useEffect(() => {
-        if (!enableAutoCost || !selectedAsset || formData.cost > 0 || initialData) return;
+        if (!selectedAsset || formData.cost > 0 || initialData) return;
 
         const categoryName = selectedAsset.categoryName || '';
         const estimatedCost = calculateEstimatedCost(categoryName, formData.type as string);
         setFormData(prev => ({ ...prev, cost: estimatedCost }));
-    }, [enableAutoCost, selectedAsset?.id, selectedAsset?.categoryName, formData.type, formData.cost, initialData?.id]);
+    }, [selectedAsset?.id, selectedAsset?.categoryName, formData.type, formData.cost, initialData?.id]);
 
     useEffect(() => {
         if (open) {
@@ -426,65 +437,6 @@ export function CreateMaintenanceModal({ open, onOpenChange, initialData, defaul
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                                    <PhilippinePeso size={12} /> Expected Cost
-                                </Label>
-                                <div className="flex gap-2">
-                                    <div className="relative flex-1">
-                                        <Input 
-                                            type="number" 
-                                            placeholder="0.00" 
-                                            value={formData.cost || ''} 
-                                            onChange={(e) => setFormData({ ...formData, cost: e.target.value ? Number(e.target.value) : 0 })} 
-                                            step="0.01"
-                                            min="0"
-                                            className={`h-10 text-sm transition-all duration-300 ${
-                                                (formData.cost || 0) >= 50000 
-                                                    ? "bg-red-50 dark:bg-red-950/20 border-red-300 dark:border-red-800 text-red-700 dark:text-red-400 font-semibold" 
-                                                    : (formData.cost || 0) >= 10000 
-                                                    ? "bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 font-medium" 
-                                                    : (formData.cost || 0) > 0
-                                                    ? "bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400"
-                                                    : "bg-background"
-                                            }`}
-                                        />
-                                        {(formData.cost || 0) >= 50000 && (
-                                            <div className="absolute inset-0 rounded-md pointer-events-none overflow-hidden">
-                                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-red-200/50 to-transparent" 
-                                                     style={{ animation: 'shimmer 2s infinite' }} />
-                                            </div>
-                                        )}
-                                    </div>
-                                    {selectedAsset && (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            className="h-10 w-10 shrink-0"
-                                            onClick={() => {
-                                                const categoryName = selectedAsset.categoryName || '';
-                                                const newCost = calculateEstimatedCost(categoryName, formData.type as string);
-                                                setFormData(prev => ({ ...prev, cost: newCost }));
-                                            }}
-                                            title="Refresh cost estimate"
-                                        >
-                                            <RefreshCw className="h-4 w-4" />
-                                        </Button>
-                                    )}
-                                </div>
-                                {(formData.cost || 0) > 0 && (
-                                    <p className={`text-xs font-medium ${
-                                        (formData.cost || 0) >= 50000 ? "text-red-600 dark:text-red-400" :
-                                        (formData.cost || 0) >= 10000 ? "text-amber-600 dark:text-amber-400" :
-                                        "text-green-600 dark:text-green-400"
-                                    }`}>
-                                        {(formData.cost || 0) >= 50000 ? "High Cost" :
-                                         (formData.cost || 0) >= 10000 ? "Moderate Cost" :
-                                         "Low Cost"}
-                                    </p>
-                                )}
-                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -534,10 +486,10 @@ export function CreateMaintenanceModal({ open, onOpenChange, initialData, defaul
                 </form>
 
                 <DialogFooter className="p-6 bg-muted/40 border-t border-border shrink-0 flex justify-end gap-3 w-full">
-                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-10 text-sm">
+                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className={getButtonClassName("h-10 text-sm")}>
                         Cancel
                     </Button>
-                    <Button type="submit" form="maintenance-form" className="h-10 text-sm px-4 bg-primary text-primary-foreground shadow-lg hover:bg-primary/90">
+                    <Button type="submit" form="maintenance-form" className={getButtonClassName("h-10 text-sm px-4 bg-primary text-primary-foreground shadow-lg hover:bg-primary/90")}>
                         {initialData ? "Save Changes" : "Submit Record"}
                     </Button>
                 </DialogFooter>

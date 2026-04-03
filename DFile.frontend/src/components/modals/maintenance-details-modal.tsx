@@ -17,6 +17,8 @@ import {
 import { MaintenanceRecord } from "@/types/asset";
 import { useAssets } from "@/hooks/use-assets";
 import { useUpdateMaintenanceRecord, useUploadAttachment, useMarkBeyondRepair } from "@/hooks/use-maintenance";
+import { useMaintenanceContext } from "@/contexts/maintenance-context";
+import { getAeroButtonClass } from "@/lib/glassmorphism-config";
 
 interface MaintenanceDetailsModalProps {
     open: boolean;
@@ -57,9 +59,18 @@ const priorityVariant: Record<string, "success" | "warning" | "danger"> = {
 
 export function MaintenanceDetailsModal({ open, onOpenChange, record, onEdit, onRequestReplacement, onOpenInspectionModal, enableGlassmorphism = false }: MaintenanceDetailsModalProps) {
     const { data: assets = [] } = useAssets();
+    const { glassType } = useMaintenanceContext();
     const updateMutation = useUpdateMaintenanceRecord();
     const uploadMutation = useUploadAttachment();
     const beyondRepairMutation = useMarkBeyondRepair();
+
+    // Helper to apply Aero button styling
+    const getButtonClassName = (baseClass: string = "") => {
+        if (glassType === 'aero') {
+            return `${baseClass} ${getAeroButtonClass()}`.trim();
+        }
+        return baseClass;
+    };
 
     const [inspectionNotes, setInspectionNotes] = useState("");
     const [diagnosisOutcome, setDiagnosisOutcome] = useState<"Repairable" | "Not Repairable" | "">("");
@@ -335,6 +346,7 @@ export function MaintenanceDetailsModal({ open, onOpenChange, record, onEdit, on
                                             <Button
                                                 variant="destructive"
                                                 size="sm"
+                                                className={getButtonClassName()}
                                                 onClick={handleMarkBeyondRepair}
                                                 disabled={isAdvancing || beyondRepairMutation.isPending}
                                             >
@@ -345,6 +357,7 @@ export function MaintenanceDetailsModal({ open, onOpenChange, record, onEdit, on
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
+                                                    className={getButtonClassName()}
                                                     onClick={() => onRequestReplacement(record.assetId)}
                                                 >
                                                     <Package size={14} className="mr-2" /> Create Replacement PO
@@ -361,7 +374,7 @@ export function MaintenanceDetailsModal({ open, onOpenChange, record, onEdit, on
                 <DialogFooter className="p-6 bg-muted/40 border-t border-border shrink-0 flex justify-between gap-3">
                     <div className="flex gap-2 flex-1">
                         {onEdit && record.status !== "Completed" && (
-                            <Button variant="outline" onClick={onEdit}>
+                            <Button variant="outline" className={getButtonClassName()} onClick={onEdit}>
                                 <Wrench size={16} className="mr-2" /> Edit
                             </Button>
                         )}
@@ -371,13 +384,13 @@ export function MaintenanceDetailsModal({ open, onOpenChange, record, onEdit, on
                             <Button
                                 onClick={handleAdvanceStatus}
                                 disabled={isAdvancing}
-                                className="bg-primary text-primary-foreground shadow-md hover:bg-primary/90"
+                                className={getButtonClassName("bg-primary text-primary-foreground shadow-md hover:bg-primary/90")}
                             >
                                 <ArrowRight size={16} className="mr-2" />
                                 {isAdvancing ? "Updating..." : `Move to ${nextStatus}`}
                             </Button>
                         )}
-                        <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        <Button variant="outline" className={getButtonClassName()} onClick={() => onOpenChange(false)}>
                             Close
                         </Button>
                     </div>

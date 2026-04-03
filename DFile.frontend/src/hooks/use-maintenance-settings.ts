@@ -1,25 +1,28 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { GlassType, GlassmorphismConfig, GLASSMORPHISM_PRESETS } from '@/lib/glassmorphism-config';
 
 export interface MaintenanceSettings {
   enableAnimations: boolean;
-  enableAutoCost: boolean;
   enableGlint: boolean;
   enableGlassmorphism: boolean;
   enableMinimalUI: boolean;
   enableDataCaching: boolean;
   enableBatchOperations: boolean;
+  glassType: GlassType;
+  glassCustomConfig?: GlassmorphismConfig;
 }
 
 const DEFAULT_SETTINGS: MaintenanceSettings = {
   enableAnimations: true,
-  enableAutoCost: true,
   enableGlint: true,
   enableGlassmorphism: false,
   enableMinimalUI: false,
   enableDataCaching: false,
   enableBatchOperations: false,
+  glassType: 'default',
+  glassCustomConfig: undefined,
 };
 
 const STORAGE_KEY = 'maintenance-settings';
@@ -90,7 +93,7 @@ export function useMaintenanceSettings() {
 
   // Update a single setting
   const updateSetting = useCallback(
-    async (key: keyof MaintenanceSettings, value: boolean) => {
+    async (key: keyof MaintenanceSettings, value: boolean | string) => {
       const newSettings = { ...settings, [key]: value };
       
       // Always update localStorage immediately for fast UX

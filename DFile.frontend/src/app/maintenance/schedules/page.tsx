@@ -21,6 +21,7 @@ import { MaintenanceDetailsModal } from "@/components/modals/maintenance-details
 import { InspectionDiagnosisModal } from "@/components/modals/inspection-diagnosis-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { getErrorMessage } from "@/lib/api";
+import { GLASSMORPHISM_PRESETS, getGlassmorphismPresetOrCustom, generateGlassmorphismClass, getAeroButtonClass } from "@/lib/glassmorphism-config";
 import { MaintenanceRecord } from "@/types/asset";
 import { toast } from "sonner";
 
@@ -110,12 +111,21 @@ export default function SchedulesPage() {
         enableBatchOperations,
         enableAnimations,
         enableGlint,
-        enableAutoCost
+        glassType,
+        glassCustomConfig,
     } = useMaintenanceContext();
     
     const cardClassName = enableGlassmorphism 
-        ? "border border-white/20 bg-white/10 dark:bg-black/10 backdrop-blur-xl ring-1 ring-white/10" 
+        ? generateGlassmorphismClass(getGlassmorphismPresetOrCustom(glassType, glassCustomConfig))
         : "";
+    
+    // Helper function to get button classes based on glass type
+    const getButtonClassName = (baseClass: string = "") => {
+        if (glassType === 'aero') {
+            return `${baseClass} ${getAeroButtonClass()}`.trim();
+        }
+        return baseClass;
+    };
     
     const [highlightedRowId, setHighlightedRowId] = useState<string | null>(highlightId);
     
@@ -267,7 +277,7 @@ export default function SchedulesPage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button onClick={() => { setSelectedRecord(null); setSelectedAssetIdForSchedule(null); setIsScheduleModalOpen(true); }} className="gap-2">
+                    <Button onClick={() => { setSelectedRecord(null); setSelectedAssetIdForSchedule(null); setIsScheduleModalOpen(true); }} className={getButtonClassName("gap-2")}>
                         <Plus className="h-4 w-4" />
                         Create Ticket
                     </Button>
@@ -305,7 +315,7 @@ export default function SchedulesPage() {
                 </Card>
             </section>
 
-            {/* Upcoming in 30 Days — uses expanded occurrences */}
+            {/* Upcoming in 30 Days — Grouped by Date */}
             {(() => {
                 const now = new Date();
                 const thirtyDaysLater = new Date(now);
@@ -317,55 +327,61 @@ export default function SchedulesPage() {
                         const d = new Date(occ.occurrenceDate);
                         return d >= now && d <= thirtyDaysLater;
                     })
-                    .sort((a, b) => new Date(a.occurrenceDate).getTime() - new Date(b.occurrenceDate).getTime())
-                    .slice(0, 5);
+                    .sort((a, b) => new Date(a.occurrenceDate).getTime() - new Date(b.occurrenceDate).getTime());
+
+                // Group by date
+                const groupedByDate = upcoming.reduce((acc, occ) => {
+                    const dateKey = new Date(occ.occurrenceDate).toLocaleDateString();
+                    if (!acc[dateKey]) acc[dateKey] = [];
+                    acc[dateKey].push(occ);
+                    return acc;
+                }, {} as Record<string, typeof upcoming>);
 
                 if (upcoming.length === 0 && !isLoading) return null;
 
                 return (
                     <Card className={cardClassName}>
-                        <div className="p-5 space-y-3">
+                        <div className="p-5 space-y-4">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                                    <CalendarClock className="h-4 w-4 text-primary" /> Upcoming in 30 Days
+                                    <CalendarClock className="h-4 w-4 text-primary" /> Upcoming Schedules
                                 </h3>
                                 <span className="text-xs text-muted-foreground">{upcoming.length} task(s)</span>
                             </div>
                             {isLoading ? (
                                 <div className="space-y-2">{[1, 2].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
                             ) : (
-                                <div className="space-y-2">
-                                    {upcoming.map(occ => {
-                                        const occDate = new Date(occ.occurrenceDate);
-                                        const daysUntil = Math.ceil((occDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                                        const assetInfo = getAssetDisplay(occ.assetId);
+                                <div className="space-y-4">
+                                    {Object.entries(groupedByDate).map(([dateStr, occurrences]) => {
+                                        const occDate = new Date(occurrences[0].occurrenceDate);
+                                        const dateFormatted = occDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                        
                                         return (
-                                            <div
-                                                key={occ.id}
-                                                className="flex items-center gap-3 p-2.5 bg-muted/30 rounded-lg border border-border/50 cursor-pointer hover:bg-muted/60 transition-colors"
-                                                onClick={() => { setSelectedRecord(getParentRecord(occ)); setIsDetailsModalOpen(true); }}
-                                            >
-                                                <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                                                    daysUntil <= 3 ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
-                                                    daysUntil <= 7 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
-                                                    "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                                }`}>
-                                                    {daysUntil === 0 ? "!" : `${daysUntil}d`}
+                                            <div key={dateStr} className="space-y-2">
+                                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{dateFormatted}</p>
+                                                <div className="space-y-2">
+                                                    {occurrences.map(occ => {
+                                                        const assetInfo = getAssetDisplay(occ.assetId);
+                                                        return (
+                                                            <div
+                                                                key={occ.id}
+                                                                className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg border border-border/50 cursor-pointer hover:bg-muted/60 transition-colors"
+                                                                onClick={() => { setSelectedRecord(getParentRecord(occ)); setIsDetailsModalOpen(true); }}
+                                                            >
+                                                                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                                                    <p className="text-sm font-medium text-foreground truncate">{occ.description}</p>
+                                                                    <p className="text-xs text-muted-foreground">
+                                                                        {assetInfo.name && <span>{assetInfo.name}</span>}
+                                                                        {assetInfo.code && <span className="ml-2 font-mono">{assetInfo.code}</span>}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                    <StatusText variant={statusVariant[occ.status] ?? "muted"}>{occ.status}</StatusText>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium truncate">{occ.description}</p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {assetInfo.code && <span className="font-mono">{assetInfo.code} · </span>}
-                                                        {occDate.toLocaleDateString()} · {occ.frequency}
-                                                        {occ.totalOccurrences > 1 && (
-                                                            <span className="ml-1 text-primary/70 font-medium">
-                                                                #{occ.occurrenceIndex + 1}/{occ.totalOccurrences}
-                                                            </span>
-                                                        )}
-                                                        {" · "}{occ.priority}
-                                                    </p>
-                                                </div>
-                                                <StatusText variant={statusVariant[occ.status] ?? "muted"}>{occ.status}</StatusText>
                                             </div>
                                         );
                                     })}
@@ -408,22 +424,22 @@ export default function SchedulesPage() {
                 <div className="flex gap-2 bg-muted p-1 rounded-lg">
                     <button
                         onClick={() => setScheduleTabView('active')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+                        className={getButtonClassName(`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
                             scheduleTabView === 'active'
                                 ? 'bg-background text-foreground shadow-sm'
                                 : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                        }`)}
                     >
                         Active
                         <Badge variant="secondary" className="ml-2 font-mono text-xs">{parentScheduledRecords.length}</Badge>
                     </button>
                     <button
                         onClick={() => setScheduleTabView('archived')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+                        className={getButtonClassName(`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
                             scheduleTabView === 'archived'
                                 ? 'bg-background text-foreground shadow-sm'
                                 : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                        }`)}
                     >
                         Archived
                         <Badge variant="secondary" className="ml-2 font-mono text-xs">{archivedScheduledRecords.length}</Badge>
@@ -464,7 +480,6 @@ export default function SchedulesPage() {
                                     <TableHead className="font-bold text-foreground">Priority</TableHead>
                                     <TableHead className="font-bold text-foreground">Status</TableHead>
                                     <TableHead className="font-bold text-foreground">Date</TableHead>
-                                    <TableHead className="font-bold text-foreground">End Date</TableHead>
                                     <TableHead className="text-right font-bold text-foreground">Action</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -552,11 +567,6 @@ export default function SchedulesPage() {
                                                     : "—"}
                                             </TableCell>
 
-                                            {/* End date */}
-                                            <TableCell className="text-sm font-medium text-foreground tabular-nums py-3 px-4">
-                                                {record.endDate ? new Date(record.endDate).toLocaleDateString() : "—"}
-                                            </TableCell>
-
                                             {/* Action */}
                                             <TableCell className="text-right py-3 px-4" onClick={e => e.stopPropagation()}>
                                                 {(() => {
@@ -566,6 +576,7 @@ export default function SchedulesPage() {
                                                             <Button
                                                                 size="sm"
                                                                 variant="outline"
+                                                                className={getButtonClassName()}
                                                                 onClick={() => {
                                                                     setArchiveScheduleTarget({ id: record.id, description: record.description });
                                                                 }}
@@ -590,6 +601,7 @@ export default function SchedulesPage() {
                                                         <Button
                                                             size="sm"
                                                             variant={nextStatus === "Completed" ? "default" : "outline"}
+                                                            className={getButtonClassName(nextStatus === "Completed" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "")}
                                                             onClick={() => {
                                                                 if (needsInspection) {
                                                                     setInspectionTarget(record);
@@ -600,7 +612,6 @@ export default function SchedulesPage() {
                                                                     setAdvanceTarget({ id: record.id, nextStatus });
                                                                 }
                                                             }}
-                                                            className={nextStatus === "Completed" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}
                                                         >
                                                             {nextStatus}
                                                         </Button>
@@ -663,7 +674,7 @@ export default function SchedulesPage() {
                             <AlertCircle className="h-10 w-10 mx-auto text-destructive opacity-80" />
                             <p className="font-medium text-destructive">Could not load allocated assets</p>
                             <p className="text-sm text-muted-foreground max-w-md mx-auto">{getErrorMessage(assetsErr, "Check that the API is running and NEXT_PUBLIC_API_URL is set for next dev.")}</p>
-                            <Button variant="outline" size="sm" onClick={() => refetchAllocated()}>Retry</Button>
+                            <Button variant="outline" size="sm" className={getButtonClassName()} onClick={() => refetchAllocated()}>Retry</Button>
                         </div>
                     ) : filteredAllocatedAssets.length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground rounded-md border">
@@ -700,6 +711,7 @@ export default function SchedulesPage() {
                                                 <Button
                                                     size="sm"
                                                     variant="destructive"
+                                                    className={getButtonClassName()}
                                                     onClick={() => {
                                                         setArchiveTarget({ assetId: a.assetId, assetName: a.assetName || a.assetId });
                                                     }}
@@ -732,7 +744,7 @@ export default function SchedulesPage() {
                             <AlertCircle className="h-10 w-10 mx-auto text-destructive opacity-80" />
                             <p className="font-medium text-destructive">Could not load archived assets</p>
                             <p className="text-sm text-muted-foreground max-w-md mx-auto">{getErrorMessage(archivedErr, "Check that the API is running.")}</p>
-                            <Button variant="outline" size="sm" onClick={() => refetchArchived()}>Retry</Button>
+                            <Button variant="outline" size="sm" className={getButtonClassName()} onClick={() => refetchArchived()}>Retry</Button>
                         </div>
                     ) : archivedAssets.length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground rounded-md border">
@@ -769,6 +781,7 @@ export default function SchedulesPage() {
                                                 <Button
                                                     size="sm"
                                                     variant="destructive"
+                                                    className={getButtonClassName()}
                                                     onClick={() => {
                                                         setDeleteTarget({ assetId: a.id, assetName: a.desc || a.id });
                                                     }}
@@ -794,7 +807,6 @@ export default function SchedulesPage() {
                     if (!open) setSelectedAssetIdForSchedule(null);
                 }}
                 defaultAssetId={selectedAssetIdForSchedule}
-                enableAutoCost={enableAutoCost}
                 enableGlassmorphism={enableGlassmorphism}
             />
 
@@ -817,10 +829,45 @@ export default function SchedulesPage() {
                 open={inspectionTarget !== null}
                 onOpenChange={(open) => { if (!open) setInspectionTarget(null); }}
                 assetName={inspectionTarget?.assetName || inspectionTarget?.assetId}
+                assetCode={(() => {
+                    const asset = assets.find(a => a.id === inspectionTarget?.assetId);
+                    return asset?.assetCode || "";
+                })()}
+                assetCategory={(() => {
+                    const asset = assets.find(a => a.id === inspectionTarget?.assetId);
+                    return asset?.categoryName || "";
+                })()}
+                assetImage={(() => {
+                    const asset = assets.find(a => a.id === inspectionTarget?.assetId);
+                    return asset?.image || "";
+                })()}
+                assetManufacturer={(() => {
+                    const asset = assets.find(a => a.id === inspectionTarget?.assetId);
+                    return asset?.manufacturer || "";
+                })()}
+                assetModel={(() => {
+                    const asset = assets.find(a => a.id === inspectionTarget?.assetId);
+                    return asset?.model || "";
+                })()}
+                assetSerialNumber={(() => {
+                    const asset = assets.find(a => a.id === inspectionTarget?.assetId);
+                    return asset?.serialNumber || "";
+                })()}
                 isLoading={updateRecordMutation.isPending}
                 enableGlassmorphism={enableGlassmorphism}
-                onSubmit={async ({ inspectionNotes, diagnosisOutcome }) => {
+                onSubmit={async ({ inspectionNotes, diagnosisOutcome, repairParts, expectedCost, description }) => {
                     if (!inspectionTarget) return;
+                    // Store inspection details
+                    const inspectionDetails = {
+                        inspectionNotes,
+                        diagnosisOutcome,
+                        repairParts,
+                        expectedCost,
+                        description
+                    };
+                    // Log for now - backend integration will follow
+                    console.log('Inspection submission:', inspectionDetails);
+                    
                     await updateRecordMutation.mutateAsync({
                         id: inspectionTarget.id,
                         payload: {
